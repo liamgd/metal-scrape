@@ -3,6 +3,7 @@
 bundle.css
 bundle.js
 bundle.js.map
+.DS_Store
 
 # End of custom
 
