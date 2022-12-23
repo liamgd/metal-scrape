@@ -1,7 +1,6 @@
 import json
-from typing import List
+from typing import TYPE_CHECKING, List
 
-import flask
 from app import (
     DataclassEncoder,
     ProductInfo,
@@ -11,16 +10,21 @@ from app import (
     load,
 )
 
+import flask
+
 app = flask.Flask(__name__)
 
 
-class _g(flask.ctx._AppCtxGlobals):
-    products: List[ProductInfo]
-    variations: List[ProductVariation]
-    specific_products: SpecificProducts
+if TYPE_CHECKING:
 
+    class _g(flask.ctx._AppCtxGlobals):
+        products: List[ProductInfo]
+        variations: List[ProductVariation]
+        specific_products: SpecificProducts
 
-g = _g()
+    g = _g()
+else:
+    g = flask.g
 
 
 @app.route('/')
