@@ -1,46 +1,68 @@
 import json
 from typing import List
 
+import flask
 from app import (
     DataclassEncoder,
     ProductInfo,
     ProductVariation,
-    get_specific_product,
+    SpecificProduct,
+    SpecificProducts,
     load,
 )
-from flask import Flask, send_from_directory
 
-app = Flask(__name__)
-
-products: List[ProductInfo] = []
-variations: List[ProductVariation] = []
+app = flask.Flask(__name__)
 
 
-@app.route("/")
+class _g(flask.ctx._AppCtxGlobals):
+    products: List[ProductInfo]
+    variations: List[ProductVariation]
+    specific_products: SpecificProducts
+
+
+g = _g()
+
+
+@app.route('/')
 def index():
-    return send_from_directory('../client/public', 'index.html')
+    return flask.send_from_directory('../client/public', 'index.html')
 
 
-@app.route("/<path:path>")
+@app.route('/<path:path>')
 def route(path):
-    return send_from_directory('../client/public', path)
+    return flask.send_from_directory('../client/public', path)
 
 
-@app.route("/products")
+@app.route('/products')
 def api_specific_products():
-    specific_products = [
-        get_specific_product(variation, products) for variation in variations
-    ]
+    args = flask.request.args
+    sort_by = args.get('sort', 'index')
+    sort_dir = args.get('sortdir', 'ascending')
+    if (
+        sort_by not in SpecificProduct.__dataclass_fields__
+        or sort_dir not in ('ascending', 'descending')
+    ):
+        return ''
+
+    ascending = sort_dir == 'ascending'
+    sorted_specific_products = g.specific_products.sorted(sort_by, ascending)
+
     specific_products_json = json.dumps(
-        specific_products, cls=DataclassEncoder, indent=4
+        sorted_specific_products, cls=DataclassEncoder
     )
     return specific_products_json
 
 
+def init() -> None:
+    g.products, g.variations = load()
+    g.specific_products = SpecificProducts(g.products, g.variations)
+
+
 def main() -> None:
-    products[:], variations[:] = load()
+    with app.app_context():
+        init()
     app.run(debug=True)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

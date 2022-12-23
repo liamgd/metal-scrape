@@ -196,9 +196,54 @@ def get_specific_product(
     return specific
 
 
+class SpecificProducts:
+    def __init__(
+        self, products: List[ProductInfo], variations: List[ProductVariation]
+    ) -> List[SpecificProduct]:
+        self.specific_products = [
+            get_specific_product(variation, products)
+            for variation in variations
+        ]
+        self.sort_cache = {}
+
+    def sorted(
+        self,
+        attribute: str,
+        ascending: bool,
+        batch_index: int = 0,
+        batch_limit: int = 20,
+    ) -> List[SpecificProduct]:
+        if (attribute, ascending) in self.sort_cache:
+            indices = self.sort_cache[(attribute, ascending)]
+            sorted_specific_products = [
+                self.specific_products[i]
+                for i in indices[batch_index : batch_index + batch_limit]
+            ]
+            return sorted_specific_products
+
+        order = ['index', 'length', 'price', 'base_weight']
+        if attribute in order:
+            order.remove(attribute)
+        order.insert(0, attribute)
+        decorated: List[Tuple[Any, Any, Any, Any, SpecificProduct, int]] = [
+            tuple(getattr(specific_product, attr) for attr in order)
+            + (specific_product, index)
+            for index, specific_product in enumerate(self.specific_products)
+        ]
+        decorated.sort(reverse=not ascending)
+        sorted_specific_products = [
+            entry[-2]
+            for entry in decorated[batch_index : batch_index + batch_limit]
+        ]
+        indices = [entry[-1] for entry in decorated]
+        self.sort_cache[(attribute, ascending)] = indices
+        return sorted_specific_products
+
+
 def main() -> None:
-    # save()
-    pass
+    products, variations = load()
+    specific_products = SpecificProducts(products, variations)
+    print(specific_products.specific_products)
 
 
 if __name__ == '__main__':

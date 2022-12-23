@@ -4,39 +4,23 @@
   const displayDigits = 2;
 
   let products: Array<any> = test_products;
-  fetch("/products")
-    .then((res) => res.json())
-    .then((res) => (products = res));
 
-  const defaultSortOrder = ["index", "length", "price", "base_weight"];
   let sortAttribute = "index";
   let sortAscending = true;
 
-  let compare = (
-    a: object,
-    b: object,
-    attribute: string,
-    ascending: boolean
-  ) => {
-    return (a[attribute] > b[attribute] ? ascending : !ascending) ? 1 : -1;
-  };
+  $: {
+    let sortDir = sortAscending ? "ascending" : "descending";
+    fetch(`/products?sort=${sortAttribute}&sortdir=${sortDir}`)
+      .then((res) => res.json())
+      .then((res) => (products = res));
+  }
 
-  $: sort = (newAttribute: string) => {
-    if (sortAttribute === newAttribute) {
+  let sort = (attribute: string) => {
+    if (sortAttribute === attribute) {
       sortAscending = !sortAscending;
     } else {
-      sortAttribute = newAttribute;
-      sortAscending = true;
+      sortAttribute = attribute;
     }
-
-    products = products.sort((a, b) => {
-      const sortOrder = [sortAttribute].concat(defaultSortOrder);
-      for (const searchAttribute of sortOrder) {
-        if (a[searchAttribute] !== b[searchAttribute]) {
-          return compare(a, b, searchAttribute, sortAscending);
-        }
-      }
-    });
   };
 </script>
 
