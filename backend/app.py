@@ -11,6 +11,7 @@ import requests
 import shortuuid
 
 WEIGHT_RE = r'^\d*\.?\d*(?= lb$)'
+DATA_DIR = 'metalscrape'
 
 
 @dataclasses.dataclass
@@ -134,8 +135,8 @@ def get_all_product_variations(
 def save(path: Optional[str] = None) -> None:
     if path is None:
         path = os.path.expanduser('~')
-    products_path = os.path.join(path, 'products.json')
-    variations_path = os.path.join(path, 'variations.json')
+    products_path = os.path.join(path, DATA_DIR, 'products.json')
+    variations_path = os.path.join(path, DATA_DIR, 'variations.json')
 
     url = 'https://www.metalsdepot.com/steel-products/steel-angle'
     products: List[ProductInfo] = list(scrape_products(url))
@@ -152,8 +153,16 @@ def load(
 ) -> Tuple[List[ProductInfo], List[ProductVariation]]:
     if path is None:
         path = os.path.expanduser('~')
-    products_path = os.path.join(path, 'products.json')
-    variations_path = os.path.join(path, 'variations.json')
+    products_path = os.path.join(path, DATA_DIR, 'products.json')
+    variations_path = os.path.join(path, DATA_DIR, 'variations.json')
+    if not os.path.exists(products_path):
+        raise FileNotFoundError(
+            f'Products JSON file not found at {products_path}'
+        )
+    if not os.path.exists(variations_path):
+        raise FileNotFoundError(
+            f'Variation JSON file not found at {variations_path}'
+        )
 
     with open(products_path, 'r') as file:
         product_dicts = json.load(file)
