@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Slider from "@bulatdashiev/svelte-slider";
   import test_products from "./testProducts";
 
   const displayDigits = 2;
@@ -7,6 +8,9 @@
 
   let sortAttribute = "index";
   let sortAscending = true;
+
+  let value: number;
+  let range = [0, 100];
 
   $: {
     let sortDir = sortAscending ? "ascending" : "descending";
@@ -26,9 +30,19 @@
 
 <div class="container">
   <h1>Metals Depot Scraper</h1>
+  <div class="filters">
+    <Slider class="slider" bind:value range />
+    <input type="number" bind:value min={range[0]} max={range[1]} />
+  </div>
   <table>
     <thead>
       <tr>
+        <th>
+          <button on:click={() => sort("material")}>Material</button>
+        </th>
+        <th>
+          <button on:click={() => sort("shape")}>Shape</button>
+        </th>
         <th>
           <button on:click={() => sort("index")}>Cross section</button>
         </th>
@@ -55,6 +69,8 @@
     <tbody>
       {#each products as product}
         <tr>
+          <td>{product.material}</td>
+          <td>{product.shape}</td>
           <td>{product.size}</td>
           <td>{product.length} ft</td>
           <td>{product.base_weight.toFixed(displayDigits)} lbs</td>
@@ -65,6 +81,7 @@
       {/each}
     </tbody>
   </table>
+  <button class="load">Load more items</button>
 </div>
 
 <style>
@@ -77,45 +94,50 @@
     flex-direction: column;
     color: white;
     background-color: #08212b;
+    padding: 4vh 0 10vh 0;
+    gap: 7vh;
   }
 
   h1 {
-    margin: 10vh 0;
+    font-size: 3.5vh;
+  }
+
+  .filters {
+    width: 50%;
   }
 
   table {
     table-layout: fixed;
     width: 80%;
     border-collapse: collapse;
-    font-size: 2.3vh;
+    font-size: 1.7vh;
     border-radius: 1.5vh 1.5vh 0 0;
     overflow: hidden;
-    margin-bottom: 25vh;
   }
 
   thead {
     background-color: #03a696;
     color: white;
-    text-align: left;
+    text-align: center;
+  }
+
+  tbody {
+    text-align: center;
   }
 
   tbody tr {
     background-color: #012e40;
-    border-bottom: thin solid #999;
   }
 
-  td,
   th {
-    padding: 2vw;
-    width: 20%;
+    padding: 3vh 1.2vw;
   }
 
-  td + td,
-  th + th {
-    width: auto;
+  td {
+    padding: 1.2vw;
   }
 
-  th button {
+  button {
     background: none;
     color: inherit;
     border: none;
@@ -130,7 +152,13 @@
     background-color: #025159;
   }
 
-  tbody tr:last-of-type {
-    border-bottom: 5px solid #f28705;
+  .load {
+    padding: 2vh;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    font-size: 2.2vh;
+    border: 3px solid white;
+    border-radius: 1.5vh;
   }
 </style>

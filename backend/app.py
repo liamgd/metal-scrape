@@ -3,12 +3,13 @@ import json
 import os
 import re
 from multiprocessing import Pool
-from typing import Any, Dict, Generator, List, Optional, Tuple
+from typing import Any, Dict, Generator, List, Literal, Optional, Tuple
 
 import bs4
 import dacite
 import requests
 import shortuuid
+from data import URLS
 
 WEIGHT_RE = r'^\d*\.?\d*(?= lb$)'
 DATA_DIR = 'metalscrape'
@@ -34,9 +35,10 @@ class ProductVariation:
 
 @dataclasses.dataclass
 class SpecificProduct:
-    uuid: str
     product_id: str
     index: int
+    material: str
+    shape: str
     size: str
     desc: str
     base_weight: float
@@ -44,6 +46,14 @@ class SpecificProduct:
     price: float
     price_per_foot: float
     price_per_pound: float
+
+    def __gt__(self, _: 'SpecificProduct') -> Literal[False]:
+        return False
+
+
+ProductBundles = Dict[
+    Tuple[str, str], Tuple[List[ProductInfo], List[ProductVariation]]
+]
 
 
 class DataclassEncoder(json.JSONEncoder):
@@ -132,13 +142,12 @@ def get_all_product_variations(
     return variations
 
 
-def save(path: Optional[str] = None) -> None:
+def save(url: str, file_name: str, path: Optional[str] = None) -> None:
     if path is None:
-        path = os.path.expanduser('~')
-    products_path = os.path.join(path, DATA_DIR, 'products.json')
-    variations_path = os.path.join(path, DATA_DIR, 'variations.json')
+        path = os.path.join(os.path.expanduser('~'), DATA_DIR)
+    products_path = os.path.join(path, file_name + '.products.json')
+    variations_path = os.path.join(path, file_name + '.variations.json')
 
-    url = 'https://www.metalsdepot.com/steel-products/steel-angle'
     products: List[ProductInfo] = list(scrape_products(url))
     with open(products_path, 'w') as file:
         json.dump(products, file, cls=DataclassEncoder, indent=4)
@@ -148,13 +157,29 @@ def save(path: Optional[str] = None) -> None:
         json.dump(variations, file, cls=DataclassEncoder, indent=4)
 
 
+def format_file_name(text: str) -> str:
+    return text.lower().replace(' ', '_')
+
+
+def unformat_file_name(text: str) -> str:
+    return text.replace('_', ' ').title()
+
+
+def save_all(
+    urls: Dict[Tuple[str, str], str], path: Optional[str] = None
+) -> None:
+    for index, ((material, shape), url) in enumerate(urls.items(), 1):
+        file_name = format_file_name(material) + '.' + format_file_name(shape)
+        save(url, file_name, path)
+        print(f'Saved {index} out of {len(urls)}: {material}, {shape}')
+
+
 def load(
-    path: Optional[str] = None,
+    file_name: str,
+    path: str,
 ) -> Tuple[List[ProductInfo], List[ProductVariation]]:
-    if path is None:
-        path = os.path.expanduser('~')
-    products_path = os.path.join(path, DATA_DIR, 'products.json')
-    variations_path = os.path.join(path, DATA_DIR, 'variations.json')
+    products_path = os.path.join(path, file_name + '.products.json')
+    variations_path = os.path.join(path, file_name + '.variations.json')
     if not os.path.exists(products_path):
         raise FileNotFoundError(
             f'Products JSON file not found at {products_path}'
@@ -181,19 +206,49 @@ def load(
     return products, variations
 
 
-def get_specific_product(
-    variation: ProductVariation, products: List[ProductInfo]
+def load_all(
+    path: Optional[str] = None,
+) -> ProductBundles:
+    if path is None:
+        path = os.path.join(os.path.expanduser('~'), DATA_DIR)
+    out: ProductBundles = {}
+    file_names = os.listdir(path)
+    for file_name in file_names:
+        file_path = os.path.join(path, file_name)
+        if not os.path.isfile(file_path):
+            print(f'Skipping path {file_path}: not a file.')
+            continue
+        if file_name.count('.') != 3:
+            print(f'Skipping path {file_path}: improperly formatted file name')
+            continue
+        material, shape, data_type, ending = file_name.split('.')
+        if ending != 'json':
+            print(f'Skipping path {file_path}: not a JSON file.')
+            continue
+        material = unformat_file_name(material)
+        shape = unformat_file_name(shape)
+        if data_type == 'products':
+            out[(material, shape)] = load(
+                file_name.removesuffix('.products.json'), path
+            )
+    return out
+
+
+def stitch_specific_product(
+    product: ProductInfo,
+    variation: ProductVariation,
+    material: str,
+    shape: str,
 ) -> SpecificProduct:
-    uuid = variation.parent_uuid
-    product = next((p for p in products if p.uuid == uuid))
     price_per_foot = variation.price / variation.length
     price_per_pound = variation.price / (
         product.base_weight * variation.length
     )
     specific = SpecificProduct(
-        uuid,
-        product.product_id,
+        product.uuid,
         product.index,
+        material,
+        shape,
         product.size,
         product.desc,
         product.base_weight,
@@ -205,14 +260,38 @@ def get_specific_product(
     return specific
 
 
+def get_specific_product(
+    variation: ProductVariation,
+    products: List[ProductInfo],
+    material: str,
+    shape: str,
+) -> SpecificProduct:
+    uuid = variation.parent_uuid
+    product = next((p for p in products if p.uuid == uuid))
+    specific = stitch_specific_product(product, variation, material, shape)
+    return specific
+
+
+def get_all_specific_products(
+    product_bundles: ProductBundles,
+) -> List[SpecificProduct]:
+    specific_products: List[SpecificProduct] = []
+    for (material, shape), (products, variations) in product_bundles.items():
+        products_dict = {product.uuid: product for product in products}
+        for variation in variations:
+            product = products_dict[variation.parent_uuid]
+            specific = stitch_specific_product(
+                product, variation, material, shape
+            )
+            specific_products.append(specific)
+    return specific_products
+
+
 class SpecificProducts:
     def __init__(
-        self, products: List[ProductInfo], variations: List[ProductVariation]
+        self, product_bundles: ProductBundles
     ) -> List[SpecificProduct]:
-        self.specific_products = [
-            get_specific_product(variation, products)
-            for variation in variations
-        ]
+        self.specific_products = get_all_specific_products(product_bundles)
         self.sort_cache = {}
 
     def sorted(
@@ -250,9 +329,8 @@ class SpecificProducts:
 
 
 def main() -> None:
-    products, variations = load()
-    specific_products = SpecificProducts(products, variations)
-    print(specific_products.specific_products)
+    product_bundles = load_all()
+    SpecificProducts(product_bundles)
 
 
 if __name__ == '__main__':

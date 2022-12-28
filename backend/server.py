@@ -1,30 +1,20 @@
 import json
-from typing import TYPE_CHECKING, List
+from dataclasses import dataclass
+from typing import Optional
 
-from app import (
-    DataclassEncoder,
-    ProductInfo,
-    ProductVariation,
-    SpecificProduct,
-    SpecificProducts,
-    load,
-)
+from app import DataclassEncoder, SpecificProduct, SpecificProducts, load_all
 
 import flask
 
 app = flask.Flask(__name__)
 
 
-if TYPE_CHECKING:
+@dataclass
+class Global:
+    specific_products: Optional[SpecificProducts]
 
-    class _g(flask.ctx._AppCtxGlobals):
-        products: List[ProductInfo]
-        variations: List[ProductVariation]
-        specific_products: SpecificProducts
 
-    g = _g()
-else:
-    g = flask.g
+g = Global(None)
 
 
 @app.route('/')
@@ -58,8 +48,8 @@ def api_specific_products():
 
 
 def init() -> None:
-    g.products, g.variations = load()
-    g.specific_products = SpecificProducts(g.products, g.variations)
+    product_bundles = load_all()
+    g.specific_products = SpecificProducts(product_bundles)
 
 
 def main() -> None:
