@@ -9,7 +9,8 @@ import bs4
 import dacite
 import requests
 import shortuuid
-from data import URLS
+
+from .data import URLS
 
 WEIGHT_RE = r'^\d*\.?\d*(?= lb$)'
 DATA_DIR = 'metalscrape'
@@ -171,7 +172,7 @@ def save_all(
     for index, ((material, shape), url) in enumerate(urls.items(), 1):
         file_name = format_file_name(material) + '.' + format_file_name(shape)
         save(url, file_name, path)
-        print(f'Saved {index} out of {len(urls)}: {material}, {shape}')
+        print(f'`Saved` {index} out of {len(urls)}: {material}, {shape}')
 
 
 def load(
@@ -294,41 +295,107 @@ class SpecificProducts:
         self.specific_products = get_all_specific_products(product_bundles)
         self.sort_cache = {}
 
-    def sorted(
+    def search(
         self,
         attribute: str,
         ascending: bool,
+        materials: Optional[List[str]],
+        shapes: Optional[List[str]],
+        filters: Dict[str, str],
         batch_index: int = 0,
         batch_limit: int = 20,
     ) -> List[SpecificProduct]:
         if (attribute, ascending) in self.sort_cache:
             indices = self.sort_cache[(attribute, ascending)]
             sorted_specific_products = [
-                self.specific_products[i]
-                for i in indices[batch_index : batch_index + batch_limit]
+                self.specific_products[index] for index in indices
             ]
-            return sorted_specific_products
+        else:
+            order = ['index', 'length', 'price', 'base_weight']
+            if attribute in order:
+                order.remove(attribute)
+            order.insert(0, attribute)
+            decorated: List[
+                Tuple[Any, Any, Any, Any, SpecificProduct, int]
+            ] = [
+                tuple(getattr(specific_product, attr) for attr in order)
+                + (specific_product, index)
+                for index, specific_product in enumerate(
+                    self.specific_products
+                )
+            ]
+            decorated.sort(reverse=not ascending)
+            sorted_specific_products = [entry[-2] for entry in decorated]
+            indices = [entry[-1] for entry in decorated]
+            self.sort_cache[(attribute, ascending)] = indices
 
-        order = ['index', 'length', 'price', 'base_weight']
-        if attribute in order:
-            order.remove(attribute)
-        order.insert(0, attribute)
-        decorated: List[Tuple[Any, Any, Any, Any, SpecificProduct, int]] = [
-            tuple(getattr(specific_product, attr) for attr in order)
-            + (specific_product, index)
-            for index, specific_product in enumerate(self.specific_products)
+        def filter_func(specific_product: SpecificProduct) -> bool:
+            return not (
+                (
+                    materials is not None
+                    and specific_product.material not in materials
+                )
+                or (
+                    shapes is not None and specific_product.shape not in shapes
+                )
+                or (
+                    filters['lengthLower'] is not None
+                    and specific_product.length < float(filters['lengthLower'])
+                )
+                or (
+                    filters['lengthUpper'] is not None
+                    and specific_product.length > float(filters['lengthUpper'])
+                )
+                or (
+                    filters['poundsPerFootLower'] is not None
+                    and specific_product.base_weight
+                    < float(filters['poundsPerFootLower'])
+                )
+                or (
+                    filters['poundsPerFootUpper'] is not None
+                    and specific_product.base_weight
+                    > float(filters['poundsPerFootUpper'])
+                )
+                or (
+                    filters['priceLower'] is not None
+                    and specific_product.price < float(filters['priceLower'])
+                )
+                or (
+                    filters['priceUpper'] is not None
+                    and specific_product.price > float(filters['priceUpper'])
+                )
+                or (
+                    filters['pricePerFootLower'] is not None
+                    and specific_product.price_per_foot
+                    < float(filters['pricePerFootLower'])
+                )
+                or (
+                    filters['pricePerFootUpper'] is not None
+                    and specific_product.price_per_foot
+                    > float(filters['pricePerFootUpper'])
+                )
+                or (
+                    filters['pricePerPoundLower'] is not None
+                    and specific_product.price_per_pound
+                    < float(filters['pricePerPoundLower'])
+                )
+                or (
+                    filters['pricePerPoundUpper'] is not None
+                    and specific_product.price_per_pound
+                    > float(filters['pricePerPoundUpper'])
+                )
+            )
+
+        filtered_specific_products = list(
+            filter(filter_func, sorted_specific_products)
+        )
+        return filtered_specific_products[
+            batch_index * batch_limit : (batch_index + 1) * batch_limit
         ]
-        decorated.sort(reverse=not ascending)
-        sorted_specific_products = [
-            entry[-2]
-            for entry in decorated[batch_index : batch_index + batch_limit]
-        ]
-        indices = [entry[-1] for entry in decorated]
-        self.sort_cache[(attribute, ascending)] = indices
-        return sorted_specific_products
 
 
 def main() -> None:
+    save_all(URLS)
     product_bundles = load_all()
     SpecificProducts(product_bundles)
 
